@@ -42,20 +42,24 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 
 class GeminiJudge(DeepEvalBaseLLM):
-    """Gemini judge for DeepEval using Google's Generative Language API with retry logic."""
+    """Gemini judge for DeepEval with multi-model fallback across available quota tiers."""
 
-    def __init__(self, model_name: str = "gemini-flash-latest"):
-        self.model_name = model_name
+    def __init__(self, model_name: str = None, models: list = None):
+        if models is None:
+            models = ["gemini-3.7-flash", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"]
+        if model_name and model_name not in models:
+            models = [model_name] + models
+        self.models = models
+        self.curr_model = self.models[0]
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY not found in environment.")
-        super().__init__(model=model_name)
+        super().__init__(model=self.curr_model)
 
     def load_model(self):
         return None
 
     def generate(self, prompt: str, schema=None, **kwargs) -> str:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent?key={self.api_key}"
         gen_config = {"temperature": 0}
         if schema is not None:
             gen_config["responseMimeType"] = "application/json"
@@ -65,29 +69,31 @@ class GeminiJudge(DeepEvalBaseLLM):
             "generationConfig": gen_config,
         }
 
-        for attempt in range(5):
-            try:
-                res = requests.post(url, json=payload, timeout=60)
-                if res.status_code == 200:
-                    data = res.json()
-                    parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                    texts = [p["text"] for p in parts if "text" in p]
-                    return "\n".join(texts)
-                elif res.status_code in (429, 503):
-                    time.sleep(2 * (attempt + 1))
-                else:
-                    res.raise_for_status()
-            except Exception as e:
-                if attempt == 4:
-                    raise e
-                time.sleep(2)
-        return ""
+        for model in self.models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+            for attempt in range(3):
+                try:
+                    res = requests.post(url, json=payload, timeout=30)
+                    if res.status_code == 200:
+                        data = res.json()
+                        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                        texts = [p["text"] for p in parts if "text" in p]
+                        text = "\n".join(texts).strip()
+                        if text:
+                            return text
+                    elif res.status_code == 429:
+                        break  # Fall back to next model tier
+                    elif res.status_code == 503:
+                        time.sleep(1 * (attempt + 1))
+                except Exception:
+                    time.sleep(1)
+        raise RuntimeError("All configured Gemini judge models failed or exhausted quota.")
 
     async def a_generate(self, prompt: str, schema=None, **kwargs) -> str:
         return self.generate(prompt, schema=schema, **kwargs)
 
     def get_model_name(self) -> str:
-        return self.model_name
+        return self.curr_model
 
 
 class OllamaJudge(DeepEvalBaseLLM):
