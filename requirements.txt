@@ -1,0 +1,44 @@
+# ============================================================
+# HR RAG Chatbot — Pinned Dependencies (arm64 / Python 3.12)
+# ============================================================
+# These versions are pinned to work together on Apple Silicon.
+# Key constraints:
+#   - torch 2.2.2 is the latest available for arm64 on PyPI
+#   - numpy <2 required because torch 2.2.x was compiled with NumPy 1.x
+#   - transformers <4.50 avoids the torch>=2.5 requirement
+#   - sentence-transformers 3.x works with transformers 4.x
+# ============================================================
+
+# NumPy — MUST be <2.0 for torch 2.2.x compatibility
+numpy<2.0
+
+# PyTorch — latest available for arm64 on PyPI
+torch==2.2.2
+
+# Transformers — pinned below version that requires torch>=2.5
+transformers>=4.40.0,<4.50.0
+sentence-transformers>=3.0.0,<4.0.0
+
+# Core LangChain
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0
+
+# Vector store
+langchain-chroma>=0.1.4
+chromadb>=0.5.0
+
+# Embeddings
+langchain-huggingface>=0.1.0
+
+# Ollama LLM
+langchain-ollama>=0.2.0
+
+# PDF loading
+pypdf>=4.0.0
+
+# DeepEval evaluation framework
+deepeval>=1.0.0
+
+# Utilities
+python-dotenv>=1.0.0

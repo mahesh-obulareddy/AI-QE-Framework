@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HR Policy Assistant</title>
+  <meta name="description" content="AI-powered HR Policy chatbot — ask any question about company policies." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Design Tokens ─────────────────────────────────────── */
+    :root {
+      --bg-base:       #0b0f1a;
+      --bg-surface:    #111827;
+      --bg-glass:      rgba(255,255,255,0.04);
+      --bg-glass-hover:rgba(255,255,255,0.07);
+      --border:        rgba(255,255,255,0.08);
+      --border-focus:  rgba(99,179,237,0.5);
+      --accent:        #6366f1;
+      --accent-light:  #818cf8;
+      --accent-glow:   rgba(99,102,241,0.25);
+      --teal:          #2dd4bf;
+      --user-bubble:   linear-gradient(135deg,#6366f1,#8b5cf6);
+      --bot-bubble:    rgba(255,255,255,0.05);
+      --text-primary:  #f1f5f9;
+      --text-secondary:#94a3b8;
+      --text-muted:    #475569;
+      --success:       #34d399;
+      --warning:       #fbbf24;
+      --radius-lg:     16px;
+      --radius-xl:     24px;
+      --shadow-glow:   0 0 40px rgba(99,102,241,0.15);
+      --transition:    0.2s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* ─── Reset ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      display: flex;
+      height: 100vh;
+    }
+
+    /* ─── Animated background ────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(99,102,241,0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(45,212,191,0.05) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── Sidebar ────────────────────────────────────────────── */
+    #sidebar {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 1;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 28px 24px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .logo-icon {
+      width: 40px; height: 40px;
+      background: var(--user-bubble);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 15px var(--accent-glow);
+      flex-shrink: 0;
+    }
+    .logo h1 { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+    .logo-sub { font-size: 12px; color: var(--text-secondary); margin-left: 52px; margin-top: -2px; }
+
+    /* Status indicator */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 10px 14px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+      transition: background var(--transition), box-shadow var(--transition);
+    }
+    .status-dot.ready  { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-dot.loading { background: var(--warning); animation: pulse 1.2s infinite; }
+    .status-dot.error  { background: #f87171; }
+    .status-text { font-size: 12px; color: var(--text-secondary); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* Policies list */
+    .sidebar-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 20px 24px 10px;
+    }
+    .policy-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 12px 12px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    .policy-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background var(--transition);
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .policy-item:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+    .policy-item .policy-icon { font-size: 15px; flex-shrink: 0; }
+
+    /* Suggested questions */
+    .suggestions { padding: 12px 12px 20px; border-top: 1px solid var(--border); }
+    .suggestions-title {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-muted);
+      padding: 0 12px 10px;
+    }
+    .suggestion-chip {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 9px 12px;
+      margin-bottom: 6px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all var(--transition);
+      line-height: 1.4;
+    }
+    .suggestion-chip:hover {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+      color: var(--text-primary);
+      transform: translateX(3px);
+    }
+
+    /* ─── Main chat area ─────────────────────────────────────── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 1;
+      position: relative;
+    }
+
+    /* Top bar */
+    #topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(17,24,39,0.8);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      flex-shrink: 0;
+    }
+    .topbar-title { font-size: 15px; font-weight: 600; }
+    .topbar-sub   { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .clear-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 16px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .clear-btn:hover { background: var(--bg-glass-hover); color: var(--text-primary); border-color: rgba(255,255,255,0.15); }
+
+    /* Messages */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    /* Welcome screen */
+    .welcome {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      text-align: center;
+      padding: 40px;
+      gap: 16px;
+      animation: fadeUp 0.5s ease;
+    }
+    .welcome-icon {
+      width: 72px; height: 72px;
+      background: var(--user-bubble);
+      border-radius: 24px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+      box-shadow: 0 8px 32px var(--accent-glow);
+      margin-bottom: 8px;
+    }
+    .welcome h2 { font-size: 24px; font-weight: 700; }
+    .welcome p  { font-size: 15px; color: var(--text-secondary); max-width: 420px; line-height: 1.6; }
+
+    /* Message rows */
+    .msg-row {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      animation: fadeUp 0.3s ease;
+    }
+    .msg-row.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .avatar.bot  { background: linear-gradient(135deg,#1e293b,#334155); border: 1px solid var(--border); }
+    .avatar.user { background: var(--user-bubble); box-shadow: 0 4px 12px var(--accent-glow); }
+
+    .msg-content { max-width: 72%; display: flex; flex-direction: column; gap: 6px; }
+    .msg-row.user .msg-content { align-items: flex-end; }
+
+    .bubble {
+      padding: 14px 18px;
+      border-radius: var(--radius-lg);
+      font-size: 14px;
+      line-height: 1.65;
+      position: relative;
+    }
+    .bubble.bot {
+      background: var(--bot-bubble);
+      border: 1px solid var(--border);
+      border-top-left-radius: 4px;
+    }
+    .bubble.user {
+      background: var(--user-bubble);
+      border-top-right-radius: 4px;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .msg-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 0 4px;
+    }
+
+    /* Sources accordion */
+    .sources-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 12px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: inherit;
+      transition: all var(--transition);
+      width: fit-content;
+    }
+    .sources-toggle:hover { background: var(--bg-glass-hover); color: var(--text-primary); }
+    .sources-toggle .chevron { transition: transform var(--transition); font-size: 10px; }
+    .sources-toggle.open .chevron { transform: rotate(180deg); }
+
+    .sources-panel {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .sources-panel.open { display: flex; }
+
+    .source-card {
+      padding: 12px 14px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      border-left: 3px solid var(--teal);
+      font-size: 12px;
+    }
+    .source-meta {
+      display: flex; gap: 8px; align-items: center;
+      margin-bottom: 6px;
+    }
+    .source-badge {
+      background: rgba(45,212,191,0.12);
+      color: var(--teal);
+      border: 1px solid rgba(45,212,191,0.2);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .page-badge {
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+    }
+    .source-text { color: var(--text-secondary); line-height: 1.5; }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 14px 18px;
+      background: var(--bot-bubble);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      border-top-left-radius: 4px;
+      width: fit-content;
+    }
+    .typing-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      animation: bounce 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-7px)} }
+
+    /* ─── Input area ─────────────────────────────────────────── */
+    #input-area {
+      padding: 20px 28px 24px;
+      border-top: 1px solid var(--border);
+      background: rgba(17,24,39,0.8);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      flex-shrink: 0;
+    }
+    .input-box {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 12px 12px 12px 20px;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .input-box:focus-within {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    #user-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.5;
+      resize: none;
+      max-height: 120px;
+      min-height: 24px;
+      padding: 0;
+    }
+    #user-input::placeholder { color: var(--text-muted); }
+    #send-btn {
+      width: 42px; height: 42px;
+      border-radius: 14px;
+      background: var(--user-bubble);
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      transition: all var(--transition);
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px var(--accent-glow);
+    }
+    #send-btn:hover:not(:disabled) { transform: scale(1.08); box-shadow: 0 6px 20px var(--accent-glow); }
+    #send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .input-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    /* ─── Animations ─────────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── Scrollbar ──────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+    /* ─── Responsive ─────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ SIDEBAR ══════════════════════════════════════════════ -->
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">
+      <div class="logo-icon">🏢</div>
+      <h1>HR Assistant</h1>
+    </div>
+    <div class="logo-sub">Powered by LangChain + Ollama</div>
+    <div class="status-row">
+      <div class="status-dot loading" id="status-dot"></div>
+      <span class="status-text" id="status-text">Connecting to server…</span>
+    </div>
+  </div>
+
+  <div class="sidebar-section-title">HR Policies</div>
+  <div class="policy-list" id="policy-list">
+    <div class="policy-item"><span class="policy-icon">⏳</span> Loading policies…</div>
+  </div>
+
+  <div class="suggestions">
+    <div class="suggestions-title">Quick Questions</div>
+    <button class="suggestion-chip" onclick="sendSuggestion(this)">What is the maternity leave policy?</button>
+    <button class="suggestion-chip" onclick="sendSuggestion(this)">How long is the probationary period?</button>
+    <button class="suggestion-chip" onclick="sendSuggestion(this)">What are the notice period requirements?</button>
+    <button class="suggestion-chip" onclick="sendSuggestion(this)">Can I work from home?</button>
+    <button class="suggestion-chip" onclick="sendSuggestion(this)">What is the drug and alcohol policy?</button>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ══════════════════════════════════════════════════ -->
+<main id="main">
+  <div id="topbar">
+    <div>
+      <div class="topbar-title">HR Policy Chat</div>
+      <div class="topbar-sub" id="model-label">Model: loading…</div>
+    </div>
+    <button class="clear-btn" onclick="clearChat()" id="clear-btn">
+      🗑 Clear Chat
+    </button>
+  </div>
+
+  <div id="messages">
+    <div class="welcome" id="welcome">
+      <div class="welcome-icon">🤝</div>
+      <h2>How can I help you?</h2>
+      <p>Ask me anything about your company's HR policies. I'll find the answer directly from the official policy documents.</p>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div class="input-box">
+      <textarea
+        id="user-input"
+        rows="1"
+        placeholder="Ask about any HR policy…"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button id="send-btn" onclick="sendMessage()" title="Send (Enter)">➤</button>
+    </div>
+    <div class="input-hint">Press <kbd style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;font-size:10px">Enter</kbd> to send &nbsp;·&nbsp; <kbd style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;font-size:10px">Shift+Enter</kbd> for new line</div>
+  </div>
+</main>
+
+<script>
+  const API = 'http://localhost:8000';
+  let isWaiting = false;
+
+  /* ─── Init ─────────────────────────────────────────────────── */
+  async function init() {
+    await checkHealth();
+    await loadPolicies();
+  }
+
+  async function checkHealth() {
+    try {
+      const r = await fetch(`${API}/health`);
+      const data = await r.json();
+      if (data.rag_ready) {
+        setStatus('ready', `Ready · ${data.model}`);
+        document.getElementById('model-label').textContent = `Model: ${data.model}`;
+      } else {
+        setStatus('loading', 'RAG chain initializing…');
+        setTimeout(checkHealth, 3000);
+      }
+    } catch {
+      setStatus('error', 'Cannot reach server');
+      setTimeout(checkHealth, 5000);
+    }
+  }
+
+  async function loadPolicies() {
+    try {
+      const r = await fetch(`${API}/documents`);
+      const data = await r.json();
+      const list = document.getElementById('policy-list');
+      if (!data.documents.length) {
+        list.innerHTML = '<div class="policy-item"><span class="policy-icon">⚠️</span> No documents found</div>';
+        return;
+      }
+      list.innerHTML = data.documents.map(name =>
+        `<div class="policy-item" onclick="sendSuggestion(null,'What is the ${name} policy?')">
+          <span class="policy-icon">📄</span>${name}
+        </div>`
+      ).join('');
+    } catch {}
+  }
+
+  function setStatus(state, text) {
+    const dot  = document.getElementById('status-dot');
+    const span = document.getElementById('status-text');
+    dot.className  = `status-dot ${state}`;
+    span.textContent = text;
+  }
+
+  /* ─── Messaging ─────────────────────────────────────────────── */
+  function sendSuggestion(el, text) {
+    const msg = text || (el && el.textContent.trim());
+    if (!msg) return;
+    document.getElementById('user-input').value = msg;
+    sendMessage();
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('user-input');
+    const text  = input.value.trim();
+    if (!text || isWaiting) return;
+
+    // Hide welcome, add user bubble
+    document.getElementById('welcome')?.remove();
+    addMessage('user', text);
+    input.value = '';
+    input.style.height = 'auto';
+
+    // Show typing indicator
+    isWaiting = true;
+    setSendState(false);
+    const typingId = addTyping();
+
+    try {
+      const res = await fetch(`${API}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      if (!res.ok) throw new Error((await res.json()).detail || 'Server error');
+      const data = await res.json();
+      removeTyping(typingId);
+      addBotMessage(data);
+    } catch (err) {
+      removeTyping(typingId);
+      addMessage('bot', `⚠️ ${err.message || 'Something went wrong. Is the server running?'}`);
+    } finally {
+      isWaiting = false;
+      setSendState(true);
+    }
+  }
+
+  function setSendState(enabled) {
+    document.getElementById('send-btn').disabled = !enabled;
+  }
+
+  /* ─── Render helpers ─────────────────────────────────────────── */
+  function addMessage(role, text) {
+    const isUser = role === 'user';
+    const time   = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const row = document.createElement('div');
+    row.className = `msg-row ${role}`;
+    row.innerHTML = `
+      <div class="avatar ${role}">${isUser ? '👤' : '🤖'}</div>
+      <div class="msg-content">
+        <div class="bubble ${role}">${escapeHtml(text).replace(/\n/g, '<br>')}</div>
+        <div class="msg-meta">${time}</div>
+      </div>`;
+    document.getElementById('messages').appendChild(row);
+    scrollToBottom();
+    return row;
+  }
+
+  function addBotMessage(data) {
+    const time  = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const uid   = 'src-' + Date.now();
+    const row   = document.createElement('div');
+    row.className = 'msg-row bot';
+
+    // Format answer — convert numbered lists to proper lines
+    const formatted = escapeHtml(data.answer)
+      .replace(/\n/g, '<br>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    const sourcesHtml = data.sources.length ? `
+      <button class="sources-toggle" id="btn-${uid}" onclick="toggleSources('${uid}')">
+        📎 ${data.sources.length} source${data.sources.length > 1 ? 's' : ''} retrieved
+        <span class="chevron">▾</span>
+      </button>
+      <div class="sources-panel" id="${uid}">
+        ${data.sources.map(s => `
+          <div class="source-card">
+            <div class="source-meta">
+              <span class="source-badge">📄 ${escapeHtml(s.source)}</span>
+              <span class="page-badge">pg ${s.page}</span>
+            </div>
+            <div class="source-text">${escapeHtml(s.text)}</div>
+          </div>`).join('')}
+      </div>` : '';
+
+    row.innerHTML = `
+      <div class="avatar bot">🤖</div>
+      <div class="msg-content">
+        <div class="bubble bot">${formatted}</div>
+        ${sourcesHtml}
+        <div class="msg-meta">${time} · via ${escapeHtml(data.model)}</div>
+      </div>`;
+    document.getElementById('messages').appendChild(row);
+    scrollToBottom();
+  }
+
+  function toggleSources(uid) {
+    const panel = document.getElementById(uid);
+    const btn   = document.getElementById('btn-' + uid);
+    panel.classList.toggle('open');
+    btn.classList.toggle('open');
+  }
+
+  function addTyping() {
+    const id  = 'typing-' + Date.now();
+    const row = document.createElement('div');
+    row.className = 'msg-row bot';
+    row.id = id;
+    row.innerHTML = `
+      <div class="avatar bot">🤖</div>
+      <div class="msg-content">
+        <div class="typing-indicator">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+      </div>`;
+    document.getElementById('messages').appendChild(row);
+    scrollToBottom();
+    return id;
+  }
+
+  function removeTyping(id) {
+    document.getElementById(id)?.remove();
+  }
+
+  function clearChat() {
+    const msgs = document.getElementById('messages');
+    msgs.innerHTML = `
+      <div class="welcome" id="welcome">
+        <div class="welcome-icon">🤝</div>
+        <h2>How can I help you?</h2>
+        <p>Ask me anything about your company's HR policies. I'll find the answer directly from the official policy documents.</p>
+      </div>`;
+  }
+
+  function scrollToBottom() {
+    const msgs = document.getElementById('messages');
+    msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' });
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ─── Boot ───────────────────────────────────────────────────── */
+  init();
+</script>
+</body>
+</html>
