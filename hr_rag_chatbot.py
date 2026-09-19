@@ -306,6 +306,7 @@ def query_hr_bot(
     question: str,
     rag_chain: Any,
     retriever: Any,
+    callbacks: list = None,
 ) -> dict:
     """
     Query the HR RAG chatbot and return a structured result for DeepEval.
@@ -319,6 +320,7 @@ def query_hr_bot(
         question:   The employee's HR policy question (plain string).
         rag_chain:  The RAG chain returned by `build_rag_chain()`.
         retriever:  The vector store retriever returned by `build_rag_chain()`.
+        callbacks:  Optional list of LangChain callbacks (e.g. DeepEval CallbackHandler).
 
     Returns:
         dict with the following keys:
@@ -356,13 +358,14 @@ def query_hr_bot(
         )
     -----------------------------------------------------------------------
     """
+    config = {"callbacks": callbacks} if callbacks else {}
+
     # Retrieve source documents independently so we have the raw Document
     # objects BEFORE they are formatted into the context string.
-    # This gives DeepEval the unmodified chunk text for evaluation.
-    retrieved_docs: list = retriever.invoke(question)
+    retrieved_docs: list = retriever.invoke(question, config=config)
 
     # Run the full RAG chain to produce the grounded answer.
-    answer: str = rag_chain.invoke(question)
+    answer: str = rag_chain.invoke(question, config=config)
 
     return {
         # Original question -> DeepEval `input`
